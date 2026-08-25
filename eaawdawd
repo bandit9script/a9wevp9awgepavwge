@@ -4795,6 +4795,116 @@ task.spawn(function()
         end
     end)
 end)
+-- Помещаем всё в task.spawn, чтобы не создавать локальных переменных в корне скрипта
+task.spawn(function()
+    local MiscWeaponBox = Tabs.Misc:AddRightGroupbox("Weapon", "crosshair")
+
+    MiscWeaponBox:AddToggle("InstantReload", {
+        Text = "Instant Reload",
+        Default = false,
+    })
+
+    local RELOAD_ANIMS = {
+        ["Reload"]       = true,
+        ["ReloadStart"]  = true,
+        ["ReloadAction"] = true,
+        ["ReloadEnd"]    = true,
+    }
+
+    local RELOAD_SPEED = 199
+    local reloadHooked = {}
+
+    local function getWeaponObjectSafe()
+        local ok, IC = pcall(function()
+            return require(game:GetService("ReplicatedStorage").Controllers.InventoryController)
+        end)
+        if not ok or not IC then return nil end
+        return IC.peekCurrentEquippedForMovement and IC.peekCurrentEquippedForMovement() or nil
+    end
+
+    local function hookAnimationReload(animModule)
+        if not animModule or reloadHooked[animModule] then return end
+        reloadHooked[animModule] = true
+
+        pcall(function()
+            local origPlay = animModule.play
+            animModule.play = function(self_anim, animName, ...)
+                local track = origPlay(self_anim, animName, ...)
+                if track and RELOAD_ANIMS[animName] then
+                    task.defer(function()
+                        pcall(function()
+                            if Toggles.InstantReload and Toggles.InstantReload.Value then
+                                if track.IsPlaying then
+                                    track:AdjustSpeed(RELOAD_SPEED)
+                                end
+                            end
+                        end)
+                    end)
+                end
+                return track
+            end
+        end)
+    end
+
+    local lastReloadWeapon = nil
+
+    task.spawn(function()
+        while task.wait(0.1) do
+            pcall(function()
+                local weapon = getWeaponObjectSafe()
+                if not weapon then return end
+
+                if weapon ~= lastReloadWeapon then
+                    lastReloadWeapon = weapon
+                    if weapon.Viewmodel and weapon.Viewmodel.Animation then
+                        hookAnimationReload(weapon.Viewmodel.Animation)
+                    end
+                    if weapon.CharacterAnimator then
+                        hookAnimationReload(weapon.CharacterAnimator)
+                    end
+                end
+
+                if not (Toggles.InstantReload and Toggles.InstantReload.Value) then return end
+
+                if weapon.IsReloading then
+                    pcall(function()
+                        if weapon.Viewmodel and weapon.Viewmodel.Animation and weapon.Viewmodel.Animation.Animations then
+                            for name, track in pairs(weapon.Viewmodel.Animation.Animations) do
+                                if RELOAD_ANIMS[name] and track.IsPlaying then
+                                    track:AdjustSpeed(RELOAD_SPEED)
+                                end
+                            end
+                        end
+                        if weapon.CharacterAnimator and weapon.CharacterAnimator.Animations then
+                            for name, track in pairs(weapon.CharacterAnimator.Animations) do
+                                if RELOAD_ANIMS[name] and track.IsPlaying then
+                                    track:AdjustSpeed(RELOAD_SPEED)
+                                end
+                            end
+                        end
+                    end)
+                end
+            end)
+        end
+    end)
+
+    pcall(function()
+        local IC = require(game:GetService("ReplicatedStorage").Controllers.InventoryController)
+        if IC.OnInventoryItemEquipped then
+            IC.OnInventoryItemEquipped:Connect(function(_, weapon)
+                if not weapon then return end
+                task.defer(function()
+                    if weapon.Viewmodel and weapon.Viewmodel.Animation then
+                        hookAnimationReload(weapon.Viewmodel.Animation)
+                    end
+                    if weapon.CharacterAnimator then
+                        hookAnimationReload(weapon.CharacterAnimator)
+                    end
+                end)
+            end)
+        end
+    end)
+end)
 -- =========================================================================
 -- [ SETTINGS FINALIZATION ]
 -- =========================================================================
