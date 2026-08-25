@@ -4797,7 +4797,7 @@ task.spawn(function()
 end)
 -- Помещаем всё в task.spawn, чтобы не создавать локальных переменных в корне скрипта
 task.spawn(function()
-    local MiscWeaponBox = Tabs.Misc:AddRightGroupbox("Weapon", "crosshair")
+    local MiscWeaponBox = Tabs.Weapons:AddRightGroupbox("Weapon", "crosshair")
 
     MiscWeaponBox:AddToggle("InstantReload", {
         Text = "Instant Reload",
